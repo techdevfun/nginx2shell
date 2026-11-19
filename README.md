@@ -91,7 +91,7 @@ The three secondary Critical 9.2 flaws from the same release are reported as sig
 - Distro builds (`nginx/1.24.0 (Ubuntu)`) parse from the `nginx/X.Y.Z` prefix; confirm distro backports in the vendor advisory.
 - NGINX Plus builds are reported UNKNOWN: Plus fixed builds differ per CVE (37.0.7.1 / 37.2.0.1 for CVE-2026-123633, 37.0.8.1 / 37.3.0.1 for CVE-2026-123007). Confirm the Plus build in the F5 advisory.
 - CVE-2026-123633 also needs low free worker connections, which is runtime state this tool cannot observe; the error log line "worker_connections are not enough" is the signal to check.
-- A name neighbour exists: `jayeshpuri/nginx2shell` (created 19/11/2026, empty, no code) and the Wiz site nginx2shell.com. This repo is the `techdevfun` checker CLI; the npm package `nginx2shell` was unclaimed at build time.
+- A name neighbour existed at build time (`jayeshpuri/nginx2shell`, created 19/11/2026, empty, no code) but has since been removed. The Wiz site nginx2shell.com is a separate advisory site. This repo is the `techdevfun` checker CLI; the npm package `nginx2shell` was unclaimed at build time.
 - nginx2shell never proves exploitability. It proves exposure conditions, and says so on every output.
 
 ## Roadmap
