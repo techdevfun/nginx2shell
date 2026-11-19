@@ -1,0 +1,94 @@
+# nginx2shell demo - real CLI output on fixture NGINX installs
+# (fake nginx binaries print fixture -V outputs and -T dumps
+#  from examples/; the 1.24.0 -V text is RECORDED from the
+#  real Ubuntu binary, the 1.31.8 / 1.30.7 texts are
+#  representative format; the fleet below is synthetic)
+
+$ nginx2shell scan --dirs nginx-1318 nginx-1307 nginx-1240
+install | version | line | http2 | proxy | verdict
+/tmp/nginx2shell-demo/fleet/nginx-1318 | 1.31.8 | mainline | on (1 block) | 1 | EXPOSED
+/tmp/nginx2shell-demo/fleet/nginx-1307 | 1.30.7 | stable | on (1 block) | 1 | SAFE
+/tmp/nginx2shell-demo/fleet/nginx-1240 | 1.24.0 | stable | off (0 blocks) | 1 | SAFE
+  deciding: affected version + HTTP/2 on (/tmp/nginx2shell-demo/fleet/nginx-1318)
+  - 1.31.8 is in the affected range for CVE-2026-123007 (fixed build is 1.31.9)
+  - HTTP/2 is on in at least one server block
+  - CVE-2026-123633 also applies: an HTTP/2 block proxies to a backend (low free worker connections is runtime state)
+  deciding: fixed build (/tmp/nginx2shell-demo/fleet/nginx-1307)
+  - 1.30.7 is at or above the fixed build (1.30.7 stable) for the 18/11/2026 release
+  deciding: HTTP/2 off, no secondary signal (/tmp/nginx2shell-demo/fleet/nginx-1240)
+  - 1.24.0 is in the affected range, but HTTP/2 is off in every server block (checked from nginx -T)
+  - no secondary signal applies (no HTTP/3 listener, no resolver directive, no mail proxy block)
+summary: 3 installs scanned - EXPOSED 1, AT-RISK 0, SAFE 2, UNKNOWN 0
+Exposure conditions only. This tool does not prove exploitability, never probes a port, and never runs exploit input. A SAFE verdict means these conditions do not line up - not that the host is safe from every NGINX flaw.
+exit: 1
+
+$ nginx2shell check nginx-1318
+verdict: EXPOSED
+install: /tmp/nginx2shell-demo/fleet/nginx-1318
+version: 1.31.8 (mainline)
+http2: on (1 of 2 blocks with HTTP/2 on, config: nginx -T)
+proxy blocks: 1
+  deciding: affected version + HTTP/2 on
+  - 1.31.8 is in the affected range for CVE-2026-123007 (fixed build is 1.31.9)
+  - HTTP/2 is on in at least one server block
+  - CVE-2026-123633 also applies: an HTTP/2 block proxies to a backend (low free worker connections is runtime state)
+  CVE-2026-123007: affected - HTTP/2 on in at least one server block (HTTP/2 send_window integer underflow (RCE))
+  CVE-2026-123633: affected - HTTP/2 on and proxy_pass in an HTTP/2 block (low free worker connections is runtime state, not decided here) (HTTP/2 use-after-free (RCE))
+  CVE-2026-121810: affected - no HTTP/3 / QUIC listener found (HTTP/3 use-after-free (secondary signal))
+  CVE-2026-123634: affected - no resolver directive found (DNS resolver use-after-free (secondary signal))
+  CVE-2026-113425: affected - no mail proxy block found (mail proxy use-after-free (secondary signal))
+Exposure conditions only. This tool does not prove exploitability, never probes a port, and never runs exploit input. A SAFE verdict means these conditions do not line up - not that the host is safe from every NGINX flaw.
+exit: 1
+
+$ nginx2shell config-scan nginx-T-http2-proxy.txt
+config: /home/hatch/workspace/github-repo-factory/nginx2shell-build/examples/nginx-T-http2-proxy.txt
+server blocks: 2
+http2: on
+  block 1: server_name shop.example.com | listen 443 ssl http2 | http2 on (listen directive carries http2) | proxy yes | resolver no | http3 no
+  block 2: server_name plain.example.com | listen 80 | http2 unknown (no http2 directive or listen flag found) | proxy no | resolver no | http3 no
+mail block: absent
+Exposure conditions only. This tool does not prove exploitability, never probes a port, and never runs exploit input. A SAFE verdict means these conditions do not line up - not that the host is safe from every NGINX flaw.
+exit: 1
+
+$ nginx2shell playbook
+nginx2shell playbook - first hour after the 18/11/2026 NGINX2Shell disclosure
+
+1. Inventory in the hour, not the week
+  Run `nginx2shell scan` on every host that runs NGINX. Patch the EXPOSED ones first: internet-facing servers with HTTP/2 on. A version-only scan over-flags hosts with HTTP/2 off.
+
+2. Patch to the fixed build
+  NGINX OSS 1.30.7 (stable) or 1.31.9 (mainline), released 18/11/2026. NGINX Plus: 37.0.7.1 / 37.2.0.1 fix CVE-2026-123633, 37.0.8.1 / 37.3.0.1 fix CVE-2026-123007. Distro packages: confirm the backport in the distro advisory, the version string alone does not prove the fix.
+
+3. If you cannot patch today, turn HTTP/2 off
+  On NGINX 1.25.1 or later set `http2 off;` in the affected server blocks. On older versions remove `http2` from the `listen` directive. This is a config change, not a project. It does NOT fix the other three Critical flaws in the same release (HTTP/3, resolver, mail proxy).
+
+4. Restart, do not just reload
+  A reload leaves the old master process running, so the binary does not change. Restart NGINX after the upgrade, then re-run `nginx2shell scan` to confirm the fixed build and that no server block still has HTTP/2 on.
+
+5. Check the other three Critical flaws too
+  The same release fixes CVE-2026-121810 (HTTP/3), CVE-2026-123634 (DNS resolver) and CVE-2026-113425 (mail proxy), all CVSS 4.0 9.2. `nginx2shell check` reports them as secondary signals when the config condition is met.
+
+6. Watch for worker crashes while you patch
+  Wiz suggests investigating unexpected worker crashes (error log lines like `worker process 1234 exited on signal 11`) and commands launched by nginx. No exploitation in the wild has been reported as of 18/11/2026.
+
+7. What NOT to do
+  Do not run exploit code from untrusted repositories: fake nginx2root exploits are circulating on GitHub. Do not probe other hosts. This tool never probes a port and never runs exploit input.
+
+Exposure conditions only. This tool does not prove exploitability, never probes a port, and never runs exploit input. A SAFE verdict means these conditions do not line up - not that the host is safe from every NGINX flaw.
+
+# Stopgap: turn HTTP/2 off in the vulnerable install config
+$ nginx2shell check nginx-1318 --config nginx-T-http2-off.txt
+verdict: SAFE
+install: /tmp/nginx2shell-demo/fleet/nginx-1318
+version: 1.31.8 (mainline)
+http2: off (0 of 1 block with HTTP/2 on, config: /home/hatch/workspace/github-repo-factory/nginx2shell-build/examples/nginx-T-http2-off.txt)
+proxy blocks: 1
+  deciding: HTTP/2 off, no secondary signal
+  - 1.31.8 is in the affected range, but HTTP/2 is off in every server block (checked from /home/hatch/workspace/github-repo-factory/nginx2shell-build/examples/nginx-T-http2-off.txt)
+  - no secondary signal applies (no HTTP/3 listener, no resolver directive, no mail proxy block)
+  CVE-2026-123007: affected - HTTP/2 off in every server block (HTTP/2 send_window integer underflow (RCE))
+  CVE-2026-123633: affected - no HTTP/2 block with proxy_pass found (HTTP/2 use-after-free (RCE))
+  CVE-2026-121810: affected - no HTTP/3 / QUIC listener found (HTTP/3 use-after-free (secondary signal))
+  CVE-2026-123634: affected - no resolver directive found (DNS resolver use-after-free (secondary signal))
+  CVE-2026-113425: affected - no mail proxy block found (mail proxy use-after-free (secondary signal))
+Exposure conditions only. This tool does not prove exploitability, never probes a port, and never runs exploit input. A SAFE verdict means these conditions do not line up - not that the host is safe from every NGINX flaw.

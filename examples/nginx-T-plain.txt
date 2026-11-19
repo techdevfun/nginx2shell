@@ -1,0 +1,13 @@
+# configuration file /etc/nginx/nginx.conf:
+events {
+  worker_connections 1024;
+}
+http {
+  server {
+    listen 80;
+    server_name plain.example.com;
+    location / {
+      root /var/www/html;
+    }
+  }
+}

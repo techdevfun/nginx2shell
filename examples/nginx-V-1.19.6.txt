@@ -1,0 +1,4 @@
+nginx version: nginx/1.19.6
+built with OpenSSL 1.1.1f 31 Mar 2020
+TLS SNI support enabled
+configure arguments: --prefix=/etc/nginx --with-http_ssl_module --with-http_v2_module
